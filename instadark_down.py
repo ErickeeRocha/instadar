@@ -1,119 +1,92 @@
+# -*- coding: utf-8 -*-
+
 import os
-import instaloader
-import tkinter as tk
-from tkinter import messagebox
-import shutil
+import time
+import threading
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from instagrapi import Client
 
-def baixar_videos(usuario, senha, perfil):
-    # Cria uma instância do Instaloader
-    loader = instaloader.Instaloader()
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
+USERNAME = os.getenv('LOGIN')
+PASSWORD = os.getenv('SENHA')
 
-    # Realiza login
-    try:
-        loader.login(usuario, senha)
-    except instaloader.exceptions.BadCredentialsException:
-        messagebox.showerror("Erro", "Credenciais inválidas. Verifique seu login e senha.")
-        return
-    except instaloader.exceptions.TwoFactorAuthRequiredException:
-        messagebox.showerror("Erro", "A autenticação em duas etapas está habilitada. Por favor, forneça o código.")
-        return
-    except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao fazer login: {str(e)}")
-        return
+LEGENDA_FIXA = """Painel para iniciantes do 7️⃣ na bio! 🐀
+.
+.
+.
+.
+#marketingdigital #marketingdigitalbrasil
+#dropshipping #dropshippingbrasil #dropshippingnacional #ecommerce
+#negociosonline #trafegopago
+#empreendedorismodigital #rendaextra
+#rendaextraemcasa #dinheiro
+#dinheiroextra #dinheiroonline #shopify"""
 
-    # Define o nome da pasta para salvar os vídeos em Downloads
-    pasta_videos = os.path.join(os.path.expanduser("~"), "Downloads", f"videos_{perfil}")
-
-    # Remove a pasta se ela já existir
-    if os.path.exists(pasta_videos):
-        try:
-            shutil.rmtree(pasta_videos)  # Remove a pasta inteira
-        except Exception as e:
-            messagebox.showwarning("Aviso", f"Erro ao remover pasta existente: {str(e)}")
-
-    # Cria a nova pasta
-    os.makedirs(pasta_videos, exist_ok=True)
-
-    try:
-        # Carrega o perfil
-        profile = instaloader.Profile.from_username(loader.context, perfil)
-
-        # Baixa apenas os vídeos MP4
-        for post in profile.get_posts():
-            if post.is_video:  # Verifica se o post é um vídeo
-                # Faz o download do post apenas se for um vídeo
-                loader.download_post(post, target=pasta_videos)
-
-                # Verifica os arquivos na pasta após o download
-                for filename in os.listdir(pasta_videos):
-                    # Constrói o caminho completo do arquivo
-                    file_path = os.path.join(pasta_videos, filename)
-                    # Verifica se o arquivo não é um vídeo .mp4
-                    if not filename.endswith(".mp4"):
-                        os.remove(file_path)  # Remove arquivos que não são MP4
-
-        # Exibir sucesso
-        messagebox.showinfo("Sucesso", f"Vídeos do perfil '{perfil}' baixados na pasta '{pasta_videos}'!")
-    except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao baixar vídeos: {str(e)}")
-
-def realizar_download():
-    perfil = entry_perfil.get().strip()
-    usuario = entry_usuario.get().strip()
-    senha = entry_senha.get().strip()
-    
-    if perfil and usuario and senha:
-        baixar_videos(usuario, senha, perfil)
+def selecionar_pasta_videos():
+    pasta = input("Digite o caminho da pasta com os vídeos: ")
+    if os.path.exists(pasta):
+        return pasta
     else:
-        messagebox.showwarning("Atenção", "Por favor, preencha todos os campos!")
+        print("A pasta selecionada não existe.")
+        return selecionar_pasta_videos()
 
-def mostrar_senha():
-    if entry_senha.cget('show') == '':
-        entry_senha.config(show='*')
-        btn_mostrar_senha.config(text="Mostrar Senha")
-    else:
-        entry_senha.config(show='')
-        btn_mostrar_senha.config(text="Ocultar Senha")
+def obter_horarios():
+    horarios = []
+    print("Selecione os horários de postagem (formato HH:MM). Digite 'fim' para terminar:")
+    while True:
+        horario = input("Horário (ou 'fim' para concluir): ")
+        if horario.lower() == 'fim':
+            break
+        if len(horario) == 5 and horario[2] == ':' and horario[:2].isdigit() and horario[3:].isdigit():
+            horarios.append(horario)
+        else:
+            print("Formato inválido. Por favor, use HH:MM.")
+    return horarios
 
-# Interface Tkinter
-root = tk.Tk()
-root.title("Baixar Vídeos do Instagram")
-root.geometry("400x400")
-root.configure(bg='#1c1c1c')  # Fundo mais escuro
+def postar_videos_thread(pasta_videos, horarios_selecionados):
+    try:
+        client = Client()
+        client.login(USERNAME, PASSWORD)
 
-# Estilos
-fonte_padrao = ("Helvetica", 12)
-cor_fundo = '#1c1c1c'
-cor_fonte = 'white'
-cor_entrada = '#333'
-cor_botao = '#4caf50'
+        videos = [f for f in os.listdir(pasta_videos) if f.endswith('.mp4')]
 
-# Título
-titulo = tk.Label(root, text="Download de Vídeos do Instagram", font=("Helvetica", 14, "bold"), bg=cor_fundo, fg=cor_fonte)
-titulo.pack(pady=20)
+        if not videos:
+            raise FileNotFoundError("Nenhum vídeo encontrado na pasta selecionada.")
 
-# Campo Nome do Usuário
-tk.Label(root, text="Nome do Usuário:", bg=cor_fundo, fg=cor_fonte, font=fonte_padrao).pack(pady=5)
-entry_usuario = tk.Entry(root, bg=cor_entrada, fg=cor_fonte, font=fonte_padrao)
-entry_usuario.pack(pady=5)
+        if not horarios_selecionados:
+            raise ValueError("Nenhum horário selecionado.")
 
-# Campo Senha
-tk.Label(root, text="Senha:", bg=cor_fundo, fg=cor_fonte, font=fonte_padrao).pack(pady=5)
-entry_senha = tk.Entry(root, show="*", bg=cor_entrada, fg=cor_fonte, font=fonte_padrao)
-entry_senha.pack(pady=5)
+        for i, video in enumerate(videos):
+            if i >= len(horarios_selecionados):
+                break
 
-# Botão para mostrar ou ocultar senha
-btn_mostrar_senha = tk.Button(root, text="Mostrar Senha", command=mostrar_senha, bg=cor_botao, fg='white', font=fonte_padrao)
-btn_mostrar_senha.pack(pady=5)
+            horario_postagem = horarios_selecionados[i]
+            horario_obj = datetime.strptime(horario_postagem, "%H:%M")
+            agora = datetime.now()
+            proxima_postagem = agora.replace(hour=horario_obj.hour, minute=horario_obj.minute, second=0, microsecond=0)
 
-# Campo Nome do Perfil
-tk.Label(root, text="Nome do Perfil:", bg=cor_fundo, fg=cor_fonte, font=fonte_padrao).pack(pady=5)
-entry_perfil = tk.Entry(root, bg=cor_entrada, fg=cor_fonte, font=fonte_padrao)
-entry_perfil.pack(pady=5)
+            if proxima_postagem < agora:
+                proxima_postagem += timedelta(days=1)
 
-# Botão para baixar vídeos
-btn_baixar = tk.Button(root, text="Baixar Vídeos", command=realizar_download, bg=cor_botao, fg='white', font=fonte_padrao)
-btn_baixar.pack(pady=20)
+            tempo_espera = (proxima_postagem - agora).total_seconds()
+            print(f"Aguardando até {horario_postagem} para postar o vídeo {video}...")
+            time.sleep(tempo_espera)
 
-# Iniciar a interface gráfica
-root.mainloop()
+            video_path = os.path.join(pasta_videos, video)
+            client.video_upload(video_path, caption=LEGENDA_FIXA)
+            print(f"Vídeo {video} postado com sucesso!")
+
+        print("Todos os vídeos foram postados com sucesso!")
+    except Exception as e:
+        print(f"Erro: {str(e)}")
+
+def postar_videos():
+    pasta_videos = selecionar_pasta_videos()
+    horarios_selecionados = obter_horarios()
+    # Inicia o processo de postagem em um thread separado
+    threading.Thread(target=postar_videos_thread, args=(pasta_videos, horarios_selecionados)).start()
+
+if __name__ == "__main__":
+    postar_videos()
